@@ -51,13 +51,21 @@ describe("loadConfig", () => {
     ).toThrowError(/MCP_AUDIENCE must equal MCP_RESOURCE/);
   });
 
-  it("requires runtime secrets to be present and valid base64", () => {
+  it("requires runtime secrets to be present", () => {
     expect(() =>
       loadConfig({ ...baseEnv, OAUTH_JWT_SIGNING_KEY_B64: "" })
     ).toThrowError(/OAUTH_JWT_SIGNING_KEY_B64 is required/);
+  });
 
+  it("rejects runtime secrets that are not valid base64", () => {
     expect(() =>
-      loadConfig({ ...baseEnv, NTFY_CONFIG_ENC_KEY_B64: "not-base64" })
-    ).toThrowError(/NTFY_CONFIG_ENC_KEY_B64 must be valid base64 or base64url|NTFY_CONFIG_ENC_KEY_B64 must decode to exactly 32 bytes/);
+      loadConfig({ ...baseEnv, NTFY_CONFIG_ENC_KEY_B64: "!!!!" })
+    ).toThrowError(/NTFY_CONFIG_ENC_KEY_B64 must be valid base64 or base64url/);
+  });
+
+  it("rejects runtime secrets with the wrong decoded length", () => {
+    expect(() =>
+      loadConfig({ ...baseEnv, NTFY_CONFIG_ENC_KEY_B64: "AAAA" })
+    ).toThrowError(/NTFY_CONFIG_ENC_KEY_B64 must decode to exactly 32 bytes/);
   });
 });

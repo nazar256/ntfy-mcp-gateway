@@ -40,6 +40,7 @@ const LOCAL_DEV_ORIGINS = new Set([
   "http://127.0.0.1:8787",
 ]);
 
+// Accepts standard base64 and base64url secrets and verifies their decoded byte length.
 function validateBase64Secret(name: string, value: string, expectedBytes: number): void {
   const normalized = value.replace(/-/g, "+").replace(/_/g, "/");
   const paddingLength = (4 - (normalized.length % 4)) % 4;

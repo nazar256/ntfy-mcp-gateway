@@ -60,10 +60,10 @@ jobs:
         run: |
           set -euo pipefail
 
-          existing_secret_names="$(
-            npx wrangler secret list --format json \
-              | node -e 'const secrets = JSON.parse(require("fs").readFileSync(0, "utf8")); for (const secret of secrets) { if (secret && typeof secret.name === "string") console.log(secret.name); }'
-          )"
+          if ! existing_secret_names="$(npx wrangler secret list --format json | jq -r '.[].name')"; then
+            echo "Failed to list existing Worker secrets before deploy." >&2
+            exit 1
+          fi
 
           required_secrets=(
             NTFY_CONFIG_ENC_KEY_B64
