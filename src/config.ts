@@ -28,14 +28,95 @@ export interface Config {
   redirectHttpsHosts: string[];
 }
 
-export function loadConfig(env: Env): Config {
+export class ConfigError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "ConfigError";
+  }
+}
+
+const LOCAL_DEV_ORIGINS = new Set([
+  "http://localhost:8787",
+  "http://127.0.0.1:8787",
+]);
+
+function getTrimmedValue(value: string | undefined): string | undefined {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : undefined;
+}
+
+function toRequestOrigin(requestUrl?: string | URL): string | undefined {
+  if (!requestUrl) return undefined;
+  return new URL(requestUrl).origin;
+}
+
+function normalizeIssuer(rawIssuer: string | undefined, requestOrigin: string | undefined): string {
+  const fallbackIssuer = requestOrigin ?? "http://localhost:8787";
+  const issuerValue = rawIssuer ?? fallbackIssuer;
+
+  let issuerUrl: URL;
+  try {
+    issuerUrl = new URL(issuerValue);
+  } catch {
+    throw new ConfigError(`OAUTH_ISSUER must be a valid absolute URL; received "${issuerValue}"`);
+  }
+
+  if (issuerUrl.pathname !== "/" || issuerUrl.search || issuerUrl.hash) {
+    throw new ConfigError(`OAUTH_ISSUER must contain origin only and must not include /mcp or any other path; received "${issuerValue}"`);
+  }
+
+  const normalizedIssuer = issuerUrl.origin;
+  const isLocalIssuer = LOCAL_DEV_ORIGINS.has(normalizedIssuer);
+  if (!isLocalIssuer && issuerUrl.protocol !== "https:") {
+    throw new ConfigError(`OAUTH_ISSUER must use https in production; received "${issuerValue}"`);
+  }
+
+  return normalizedIssuer;
+}
+
+function normalizeMcpResource(rawResource: string | undefined, issuer: string): string {
+  const resourceValue = rawResource ?? `${issuer}/mcp`;
+
+  let resourceUrl: URL;
+  try {
+    resourceUrl = new URL(resourceValue);
+  } catch {
+    throw new ConfigError(`MCP_RESOURCE must be an absolute URL ending with /mcp; received "${resourceValue}"`);
+  }
+
+  if (resourceUrl.search || resourceUrl.hash) {
+    throw new ConfigError(`MCP_RESOURCE must not include query or hash; received "${resourceValue}"`);
+  }
+
+  const expectedResource = `${issuer}/mcp`;
+  if (resourceUrl.toString() !== expectedResource) {
+    throw new ConfigError(`MCP_RESOURCE must equal "${expectedResource}"; received "${resourceValue}"`);
+  }
+
+  return resourceUrl.toString();
+}
+
+function normalizeMcpAudience(rawAudience: string | undefined, mcpResource: string): string {
+  const audience = rawAudience ?? mcpResource;
+  if (audience !== mcpResource) {
+    throw new ConfigError(`MCP_AUDIENCE must equal MCP_RESOURCE; received "${audience}"`);
+  }
+  return audience;
+}
+
+export function loadConfig(env: Env, requestUrl?: string | URL): Config {
+  const requestOrigin = toRequestOrigin(requestUrl);
+  const issuer = normalizeIssuer(getTrimmedValue(env.OAUTH_ISSUER), requestOrigin);
+  const mcpResource = normalizeMcpResource(getTrimmedValue(env.MCP_RESOURCE), issuer);
+  const mcpAudience = normalizeMcpAudience(getTrimmedValue(env.MCP_AUDIENCE), mcpResource);
+
   return {
     encKeyB64: env.NTFY_CONFIG_ENC_KEY_B64,
     jwtSigningKeyB64: env.OAUTH_JWT_SIGNING_KEY_B64,
     csrfSigningKeyB64: env.CSRF_SIGNING_KEY_B64,
-    issuer: env.OAUTH_ISSUER || "http://localhost:8787",
-    mcpResource: env.MCP_RESOURCE || "http://localhost:8787/mcp",
-    mcpAudience: env.MCP_AUDIENCE || env.MCP_RESOURCE || "http://localhost:8787/mcp",
+    issuer,
+    mcpResource,
+    mcpAudience,
     authCodeTtl: parseInt(env.AUTH_CODE_TTL_SECONDS || "300", 10),
     accessTokenTtl: parseInt(env.ACCESS_TOKEN_TTL_SECONDS || "3600", 10),
     authorizeRateLimit: parseInt(env.AUTHORIZE_RATE_LIMIT_PER_MINUTE || "20", 10),

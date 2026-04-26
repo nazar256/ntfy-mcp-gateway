@@ -4,9 +4,9 @@ compatibility_date = "2024-09-23"
 compatibility_flags = ["nodejs_compat"]
 
 [vars]
-OAUTH_ISSUER = ""
-MCP_RESOURCE = ""
-MCP_AUDIENCE = ""
+OAUTH_ISSUER = "https://ntfy-mcp-gateway.xyofn8h7t.workers.dev"
+MCP_RESOURCE = "https://ntfy-mcp-gateway.xyofn8h7t.workers.dev/mcp"
+MCP_AUDIENCE = "https://ntfy-mcp-gateway.xyofn8h7t.workers.dev/mcp"
 AUTH_CODE_TTL_SECONDS = "300"
 ACCESS_TOKEN_TTL_SECONDS = "3600"
 AUTHORIZE_RATE_LIMIT_PER_MINUTE = "20"
