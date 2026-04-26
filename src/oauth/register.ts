@@ -2,7 +2,7 @@ import type { Config } from "../config.ts";
 import { base64ToBytes, bytesToBase64Url } from "../security/crypto.ts";
 
 const SUPPORTED_SCOPE = "notify.write";
-const SUPPORTED_GRANT_TYPES = ["authorization_code"] as const;
+const SUPPORTED_GRANT_TYPES = ["authorization_code", "refresh_token"] as const;
 const SUPPORTED_RESPONSE_TYPES = ["code"] as const;
 const REGISTER_CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
@@ -147,10 +147,11 @@ function readOptionalStringArray(body: Record<string, unknown>, field: string): 
 function validateGrantTypes(rawGrantTypes: string[] | undefined): string[] {
   const grantTypes = rawGrantTypes ? uniqueSorted(rawGrantTypes) : [...SUPPORTED_GRANT_TYPES];
   if (
-    grantTypes.length !== SUPPORTED_GRANT_TYPES.length ||
-    grantTypes.some((grantType, index) => grantType !== SUPPORTED_GRANT_TYPES[index])
+    grantTypes.length === 0 ||
+    !grantTypes.includes("authorization_code") ||
+    grantTypes.some((grantType) => !SUPPORTED_GRANT_TYPES.includes(grantType as (typeof SUPPORTED_GRANT_TYPES)[number]))
   ) {
-    throw new RegisterMetadataError("Only grant_types [authorization_code] are supported");
+    throw new RegisterMetadataError("Supported grant_types are [authorization_code, refresh_token], and authorization_code is required");
   }
   return [...SUPPORTED_GRANT_TYPES];
 }

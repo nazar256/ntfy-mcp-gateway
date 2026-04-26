@@ -148,7 +148,7 @@ describe("OAuth compatibility flow", () => {
       tos_uri: "https://chatgpt.com/tos",
       policy_uri: "https://chatgpt.com/privacy",
       scope: "notify.write",
-      grant_types: ["authorization_code"],
+      grant_types: ["authorization_code", "refresh_token"],
       response_types: ["code"],
       application_type: "web",
       ignored_by_server: true,
@@ -166,7 +166,7 @@ describe("OAuth compatibility flow", () => {
       "https://chatgpt.com/aip/callback",
     ]);
     expect(json.token_endpoint_auth_method).toBe("none");
-    expect(json.grant_types).toEqual(["authorization_code"]);
+    expect(json.grant_types).toEqual(["authorization_code", "refresh_token"]);
     expect(json.response_types).toEqual(["code"]);
     expect(json.scope).toBe("notify.write");
     expect(json.client_name).toBe("ChatGPT");
@@ -269,6 +269,44 @@ describe("OAuth compatibility flow", () => {
     expect(tokenRes.status).toBe(200);
     expect(tokenRes.headers.get("Cache-Control")).toBe("no-store");
     expect(tokenRes.headers.get("Pragma")).toBe("no-cache");
+  });
+
+  it("token exchange issues and accepts refresh tokens", async () => {
+    const registration = await registerClient();
+    const { client_id } = await registration.json() as { client_id: string };
+    const auth = await authorizeAndGetCode({
+      clientId: client_id,
+      redirectUri: "https://chatgpt.com/aip/callback",
+      resource: MCP_RESOURCE,
+    });
+    expect(auth.code).toBeTruthy();
+
+    const tokenRes = await exchangeToken(auth.code!, client_id, "https://chatgpt.com/aip/callback", auth.codeVerifier, MCP_RESOURCE);
+    expect(tokenRes.status).toBe(200);
+    const tokenJson = await tokenRes.json() as { access_token: string; refresh_token: string; token_type: string };
+    expect(tokenJson.access_token).toBeTypeOf("string");
+    expect(tokenJson.refresh_token).toBeTypeOf("string");
+    expect(tokenJson.token_type).toBe("Bearer");
+
+    const refreshRes = await worker.fetch(
+      new Request(`${ISSUER}/token`, {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({
+          grant_type: "refresh_token",
+          client_id,
+          refresh_token: tokenJson.refresh_token,
+          resource: MCP_RESOURCE,
+        }).toString(),
+      }),
+      testEnv
+    );
+
+    expect(refreshRes.status).toBe(200);
+    const refreshJson = await refreshRes.json() as { access_token: string; refresh_token: string; token_type: string };
+    expect(refreshJson.access_token).toBeTypeOf("string");
+    expect(refreshJson.refresh_token).toBeTypeOf("string");
+    expect(refreshJson.token_type).toBe("Bearer");
   });
 
   it("authorize rejects a client_id that does not match redirect_uri", async () => {
