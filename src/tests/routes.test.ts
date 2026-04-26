@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi, afterEach } from "vitest";
 import worker from "../index.ts";
 import type { Env } from "../config.ts";
 
@@ -30,6 +30,10 @@ async function req(method: string, path: string, body?: BodyInit, headers?: Reco
     testEnv
   );
 }
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
 
 describe("Route method checks (405)", () => {
   it("GET / returns 200", async () => {
@@ -145,6 +149,28 @@ describe("Unauthenticated /mcp returns 401", () => {
     const json = await r.json() as Record<string, unknown>;
     expect(json.error).toBe("invalid_config");
     expect(json.error_description).toBeTypeOf("string");
+  });
+
+  it("logs request context when /register fails because a secret is missing", async () => {
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const r = await worker.fetch(
+      new Request("https://ntfy-mcp-gateway.xyofn8h7t.workers.dev/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ redirect_uris: ["https://chatgpt.com/aip/callback"] }),
+      }),
+      { ...blankUrlEnv, OAUTH_JWT_SIGNING_KEY_B64: "" }
+    );
+
+    expect(r.status).toBe(500);
+    const json = await r.json() as Record<string, unknown>;
+    expect(json.error).toBe("invalid_config");
+    expect(json.error_description).toBe("OAUTH_JWT_SIGNING_KEY_B64 is required");
+    expect(errorSpy).toHaveBeenCalledWith(
+      "Request failed due to invalid config",
+      expect.stringContaining("\"path\":\"/register\"")
+    );
   });
 
   it("POST /mcp with access_token query param still returns 401", async () => {
