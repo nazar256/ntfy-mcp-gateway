@@ -23,6 +23,7 @@ const blankUrlEnv: Env = {
   MCP_RESOURCE: "",
   MCP_AUDIENCE: "",
 };
+const deployedBaseUrl = "https://ntfy-mcp-gateway.xyofn8h7t.workers.dev";
 
 async function req(method: string, path: string, body?: BodyInit, headers?: Record<string, string>): Promise<Response> {
   return worker.fetch(
@@ -141,8 +142,8 @@ describe("Unauthenticated /mcp returns 401", () => {
 
   it("returns a clear config error instead of advertising an invalid issuer path", async () => {
     const r = await worker.fetch(
-      new Request("https://ntfy-mcp-gateway.xyofn8h7t.workers.dev/.well-known/oauth-authorization-server"),
-      { ...blankUrlEnv, OAUTH_ISSUER: "https://ntfy-mcp-gateway.xyofn8h7t.workers.dev/mcp" }
+      new Request(`${deployedBaseUrl}/.well-known/oauth-authorization-server`),
+      { ...blankUrlEnv, OAUTH_ISSUER: `${deployedBaseUrl}/mcp` }
     );
 
     expect(r.status).toBe(500);
@@ -155,7 +156,7 @@ describe("Unauthenticated /mcp returns 401", () => {
     const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
 
     const r = await worker.fetch(
-      new Request("https://ntfy-mcp-gateway.xyofn8h7t.workers.dev/register", {
+      new Request(`${deployedBaseUrl}/register`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ redirect_uris: ["https://chatgpt.com/aip/callback"] }),

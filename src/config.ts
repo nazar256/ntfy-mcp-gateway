@@ -40,7 +40,7 @@ const LOCAL_DEV_ORIGINS = new Set([
   "http://127.0.0.1:8787",
 ]);
 
-function decodeBase64Secret(name: string, value: string, expectedBytes: number): void {
+function validateBase64Secret(name: string, value: string, expectedBytes: number): void {
   const normalized = value.replace(/-/g, "+").replace(/_/g, "/");
   const paddingLength = (4 - (normalized.length % 4)) % 4;
   const paddedValue = normalized + "=".repeat(paddingLength);
@@ -62,12 +62,12 @@ function getTrimmedValue(value: string | undefined): string | undefined {
   return trimmed ? trimmed : undefined;
 }
 
-function getRequiredSecret(name: keyof Env, value: string | undefined): string {
+function getValidatedSecret(name: keyof Env, value: string | undefined): string {
   const trimmedValue = getTrimmedValue(value);
   if (!trimmedValue) {
     throw new ConfigError(`${name} is required`);
   }
-  decodeBase64Secret(name, trimmedValue, 32);
+  validateBase64Secret(name, trimmedValue, 32);
   return trimmedValue;
 }
 
@@ -132,9 +132,9 @@ function normalizeMcpAudience(rawAudience: string | undefined, mcpResource: stri
 
 export function loadConfig(env: Env, requestUrl?: string | URL): Config {
   const requestOrigin = toRequestOrigin(requestUrl);
-  const encKeyB64 = getRequiredSecret("NTFY_CONFIG_ENC_KEY_B64", env.NTFY_CONFIG_ENC_KEY_B64);
-  const jwtSigningKeyB64 = getRequiredSecret("OAUTH_JWT_SIGNING_KEY_B64", env.OAUTH_JWT_SIGNING_KEY_B64);
-  const csrfSigningKeyB64 = getRequiredSecret("CSRF_SIGNING_KEY_B64", env.CSRF_SIGNING_KEY_B64);
+  const encKeyB64 = getValidatedSecret("NTFY_CONFIG_ENC_KEY_B64", env.NTFY_CONFIG_ENC_KEY_B64);
+  const jwtSigningKeyB64 = getValidatedSecret("OAUTH_JWT_SIGNING_KEY_B64", env.OAUTH_JWT_SIGNING_KEY_B64);
+  const csrfSigningKeyB64 = getValidatedSecret("CSRF_SIGNING_KEY_B64", env.CSRF_SIGNING_KEY_B64);
   const issuer = normalizeIssuer(getTrimmedValue(env.OAUTH_ISSUER), requestOrigin);
   const mcpResource = normalizeMcpResource(getTrimmedValue(env.MCP_RESOURCE), issuer);
   const mcpAudience = normalizeMcpAudience(getTrimmedValue(env.MCP_AUDIENCE), mcpResource);
