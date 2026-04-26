@@ -58,7 +58,7 @@ function normalizeIssuer(rawIssuer: string | undefined, requestOrigin: string | 
   try {
     issuerUrl = new URL(issuerValue);
   } catch {
-    throw new ConfigError(`OAUTH_ISSUER must be an absolute origin URL without a path; received "${issuerValue}"`);
+    throw new ConfigError(`OAUTH_ISSUER must be a valid absolute URL; received "${issuerValue}"`);
   }
 
   if (issuerUrl.pathname !== "/" || issuerUrl.search || issuerUrl.hash) {
@@ -88,13 +88,12 @@ function normalizeMcpResource(rawResource: string | undefined, issuer: string): 
     throw new ConfigError(`MCP_RESOURCE must not include query or hash; received "${resourceValue}"`);
   }
 
-  const normalizedResource = resourceUrl.toString().replace(/\/$/, "");
   const expectedResource = `${issuer}/mcp`;
-  if (normalizedResource !== expectedResource) {
+  if (resourceUrl.toString() !== expectedResource) {
     throw new ConfigError(`MCP_RESOURCE must equal "${expectedResource}"; received "${resourceValue}"`);
   }
 
-  return normalizedResource;
+  return resourceUrl.toString();
 }
 
 function normalizeMcpAudience(rawAudience: string | undefined, mcpResource: string): string {
