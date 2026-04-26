@@ -1,5 +1,5 @@
 import type { Env } from "./config.ts";
-import { loadConfig } from "./config.ts";
+import { ConfigError, loadConfig } from "./config.ts";
 import { getAuthServerMetadata, getProtectedResourceMetadata } from "./oauth/metadata.ts";
 import { handleRegister } from "./oauth/register.ts";
 import { handleAuthorizeGet, handleAuthorizePost } from "./oauth/authorize.ts";
@@ -19,12 +19,12 @@ function methodNotAllowed(allowed: string): Response {
 
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
-    const config = loadConfig(env);
-    const url = new URL(request.url);
-    const path = url.pathname;
-    const method = request.method.toUpperCase();
-
     try {
+      const url = new URL(request.url);
+      const config = loadConfig(env, url);
+      const path = url.pathname;
+      const method = request.method.toUpperCase();
+
       if (path === "/") {
         if (method !== "GET") return methodNotAllowed("GET");
         return Response.json({
@@ -74,6 +74,12 @@ export default {
 
       return notFound();
     } catch (e) {
+      if (e instanceof ConfigError) {
+        return Response.json(
+          { error: "invalid_config", error_description: e.message },
+          { status: 500 }
+        );
+      }
       console.error("Unhandled error:", (e as Error).message);
       return Response.json({ error: "internal_server_error" }, { status: 500 });
     }
