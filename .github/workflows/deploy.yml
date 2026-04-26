@@ -52,6 +52,35 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Initialize missing Worker secrets
+        shell: bash
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+
+          existing_secret_names="$(
+            npx wrangler secret list --format json \
+              | node -e 'const secrets = JSON.parse(require("fs").readFileSync(0, "utf8")); for (const secret of secrets) { if (secret && typeof secret.name === "string") console.log(secret.name); }'
+          )"
+
+          required_secrets=(
+            NTFY_CONFIG_ENC_KEY_B64
+            OAUTH_JWT_SIGNING_KEY_B64
+            CSRF_SIGNING_KEY_B64
+          )
+
+          for secret_name in "${required_secrets[@]}"; do
+            if grep -Fxq "$secret_name" <<<"$existing_secret_names"; then
+              echo "Worker secret already initialized: $secret_name"
+              continue
+            fi
+
+            echo "Initializing missing Worker secret: $secret_name"
+            openssl rand -base64 32 | tr -d '\n' | npx wrangler secret put "$secret_name"
+          done
+
       - name: Deploy
         run: npx wrangler deploy
         env:
