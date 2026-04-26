@@ -272,8 +272,10 @@ describe("OAuth compatibility flow", () => {
   });
 
   it("token exchange issues and accepts refresh tokens", async () => {
-    const registration = await registerClient();
-    const { client_id } = await registration.json() as { client_id: string };
+    const registration = await registerClient({ grant_types: ["authorization_code", "refresh_token"] });
+    const registrationJson = await registration.json() as { client_id: string; grant_types: string[] };
+    expect(registrationJson.grant_types).toContain("refresh_token");
+    const { client_id } = registrationJson;
     const auth = await authorizeAndGetCode({
       clientId: client_id,
       redirectUri: "https://chatgpt.com/aip/callback",

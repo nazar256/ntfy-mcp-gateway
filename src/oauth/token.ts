@@ -1,6 +1,6 @@
 import type { Config } from "../config.ts";
 import { verifyJwt, signJwt, bytesToBase64Url } from "../security/crypto.ts";
-import { isValidClientIdForRedirectUri } from "./register.ts";
+import { clientSupportsGrantType, isValidClientIdForRedirectUri } from "./register.ts";
 
 const REFRESH_TOKEN_TTL_SECONDS = 60 * 60 * 24 * 30;
 
@@ -30,7 +30,11 @@ function buildTokenState(payload: Record<string, unknown>, clientId: string, con
   };
 }
 
-async function issueTokens(state: TokenState, config: Config): Promise<{ accessToken: string; refreshToken: string }> {
+async function issueTokens(
+  state: TokenState,
+  config: Config,
+  includeRefreshToken: boolean
+): Promise<{ accessToken: string; refreshToken?: string }> {
   const accessToken = await signJwt(
     {
       iss: config.issuer,
@@ -46,6 +50,10 @@ async function issueTokens(state: TokenState, config: Config): Promise<{ accessT
     config.jwtSigningKeyB64,
     config.accessTokenTtl
   );
+
+  if (!includeRefreshToken) {
+    return { accessToken };
+  }
 
   const refreshToken = await signJwt(
     {
@@ -146,15 +154,22 @@ export async function handleToken(request: Request, config: Config): Promise<Res
       return tokenError("invalid_grant", "Invalid code_verifier", 400);
     }
 
-    const { accessToken, refreshToken } = await issueTokens(buildTokenState(authCodePayload, clientId, config), config);
+    const { accessToken, refreshToken } = await issueTokens(
+      buildTokenState(authCodePayload, clientId, config),
+      config,
+      await clientSupportsGrantType(clientId, "refresh_token", config)
+    );
 
-    return tokenJson({
+    const responseBody: Record<string, unknown> = {
       access_token: accessToken,
-      refresh_token: refreshToken,
       token_type: "Bearer",
       expires_in: config.accessTokenTtl,
       scope: typeof authCodePayload["scope"] === "string" ? authCodePayload["scope"] : "notify.write",
-    }, 200);
+    };
+    if (refreshToken) {
+      responseBody.refresh_token = refreshToken;
+    }
+    return tokenJson(responseBody, 200);
   }
 
   if (grantType === "refresh_token") {
@@ -188,7 +203,8 @@ export async function handleToken(request: Request, config: Config): Promise<Res
 
     const { accessToken, refreshToken: nextRefreshToken } = await issueTokens(
       buildTokenState(refreshTokenPayload, clientId, config),
-      config
+      config,
+      true
     );
 
     return tokenJson({

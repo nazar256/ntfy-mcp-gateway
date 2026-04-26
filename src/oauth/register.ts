@@ -40,6 +40,11 @@ interface RegistrationMetadata {
   application_type?: string;
 }
 
+interface StructuredClientIdPayload {
+  redirect_uris: string[];
+  grant_types?: string[];
+}
+
 class RegisterMetadataError extends Error {
   constructor(message: string) {
     super(message);
@@ -145,7 +150,7 @@ function readOptionalStringArray(body: Record<string, unknown>, field: string): 
 }
 
 function validateGrantTypes(rawGrantTypes: string[] | undefined): string[] {
-  const grantTypes = rawGrantTypes ? uniqueSorted(rawGrantTypes) : [...SUPPORTED_GRANT_TYPES];
+  const grantTypes = rawGrantTypes ? uniqueSorted(rawGrantTypes) : ["authorization_code"];
   if (
     grantTypes.length === 0 ||
     !grantTypes.includes("authorization_code") ||
@@ -153,7 +158,7 @@ function validateGrantTypes(rawGrantTypes: string[] | undefined): string[] {
   ) {
     throw new RegisterMetadataError("Supported grant_types are [authorization_code, refresh_token], and authorization_code is required");
   }
-  return [...SUPPORTED_GRANT_TYPES];
+  return grantTypes;
 }
 
 function validateResponseTypes(rawResponseTypes: string[] | undefined): string[] {
@@ -251,14 +256,19 @@ async function deterministicLegacyClientId(redirectUri: string): Promise<string>
   return bytesToBase64Url(new Uint8Array(hash)).slice(0, 22);
 }
 
-export async function deriveClientId(redirectUris: string[], config: Config): Promise<string> {
+export async function deriveClientId(redirectUris: string[], config: Config, grantTypes?: string[]): Promise<string> {
   const normalizedRedirectUris = normalizeRedirectUris(redirectUris, config.redirectHttpsHosts);
-  const payloadB64 = bytesToBase64Url(new TextEncoder().encode(JSON.stringify({ redirect_uris: normalizedRedirectUris })));
+  const normalizedGrantTypes = grantTypes ? uniqueSorted(grantTypes) : undefined;
+  const payload: StructuredClientIdPayload = { redirect_uris: normalizedRedirectUris };
+  if (normalizedGrantTypes && normalizedGrantTypes.length > 0) {
+    payload.grant_types = normalizedGrantTypes;
+  }
+  const payloadB64 = bytesToBase64Url(new TextEncoder().encode(JSON.stringify(payload)));
   const signatureB64 = await signClientIdPayload(payloadB64, config.jwtSigningKeyB64);
   return `ntfy.${payloadB64}.${signatureB64}`;
 }
 
-async function decodeClientId(clientId: string, keyB64: string): Promise<string[] | null> {
+async function decodeClientId(clientId: string, keyB64: string): Promise<StructuredClientIdPayload | null> {
   if (!clientId.startsWith("ntfy.")) return null;
 
   const parts = clientId.split(".");
@@ -270,11 +280,20 @@ async function decodeClientId(clientId: string, keyB64: string): Promise<string[
 
   try {
     const payloadText = new TextDecoder().decode(base64ToBytes(payloadB64));
-    const payload = JSON.parse(payloadText) as { redirect_uris?: unknown };
+    const payload = JSON.parse(payloadText) as { redirect_uris?: unknown; grant_types?: unknown };
     if (!Array.isArray(payload.redirect_uris) || payload.redirect_uris.some((value) => typeof value !== "string")) {
       return null;
     }
-    return uniqueSorted(payload.redirect_uris);
+    if (
+      payload.grant_types !== undefined &&
+      (!Array.isArray(payload.grant_types) || payload.grant_types.some((value) => typeof value !== "string"))
+    ) {
+      return null;
+    }
+    return {
+      redirect_uris: uniqueSorted(payload.redirect_uris),
+      grant_types: Array.isArray(payload.grant_types) ? uniqueSorted(payload.grant_types) : undefined,
+    };
   } catch {
     return null;
   }
@@ -285,13 +304,21 @@ export async function isValidClientIdForRedirectUri(clientId: string, redirectUr
   if (!redirectValidation.ok) return false;
 
   const normalizedRedirectUri = redirectValidation.normalizedUri;
-  const structuredRedirectUris = await decodeClientId(clientId, config.jwtSigningKeyB64);
-  if (structuredRedirectUris) {
-    return structuredRedirectUris.includes(normalizedRedirectUri);
+  const structuredClientId = await decodeClientId(clientId, config.jwtSigningKeyB64);
+  if (structuredClientId) {
+    return structuredClientId.redirect_uris.includes(normalizedRedirectUri);
   }
 
   const legacyClientId = await deterministicLegacyClientId(normalizedRedirectUri);
   return clientId === legacyClientId;
+}
+
+export async function clientSupportsGrantType(clientId: string, grantType: string, config: Config): Promise<boolean> {
+  const structuredClientId = await decodeClientId(clientId, config.jwtSigningKeyB64);
+  if (!structuredClientId?.grant_types) {
+    return grantType === "authorization_code";
+  }
+  return structuredClientId.grant_types.includes(grantType);
 }
 
 function parseRegistrationMetadata(body: Record<string, unknown>, config: Config): RegistrationMetadata {
@@ -352,7 +379,7 @@ export async function handleRegister(request: Request, config: Config): Promise<
     throw error;
   }
 
-  const clientId = await deriveClientId(metadata.redirect_uris, config);
+  const clientId = await deriveClientId(metadata.redirect_uris, config, metadata.grant_types);
   const responseBody: Record<string, unknown> = {
     client_id: clientId,
     client_id_issued_at: Math.floor(Date.now() / 1000),
