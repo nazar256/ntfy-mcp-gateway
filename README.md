@@ -87,13 +87,15 @@ openssl rand -base64 32   # OAUTH_JWT_SIGNING_KEY_B64
 openssl rand -base64 32   # CSRF_SIGNING_KEY_B64
 ```
 
-### 2) Set Worker runtime secrets (one-time per environment)
+### 2) Set Worker runtime secrets (optional for manual deploys)
 
 ```bash
 wrangler secret put NTFY_CONFIG_ENC_KEY_B64
 wrangler secret put OAUTH_JWT_SIGNING_KEY_B64
 wrangler secret put CSRF_SIGNING_KEY_B64
 ```
+
+The GitHub Actions deploy workflow auto-initializes any missing Worker runtime secrets and only creates the ones that are absent. Each generated value is produced with secure random bytes and piped directly into `wrangler secret put` without being written to disk.
 
 ### 3) Configure Worker vars in `wrangler.toml`
 
@@ -115,7 +117,7 @@ Set repository secrets:
 - `CLOUDFLARE_API_TOKEN`
 - `CLOUDFLARE_ACCOUNT_ID`
 
-Create a **least-privilege** API token in Cloudflare with only permissions needed to deploy Workers (for a specific account and, ideally, scoped resources).
+Create a **least-privilege** API token in Cloudflare with only permissions needed to deploy Workers and manage Worker secrets (for a specific account and, ideally, scoped resources).
 
 ### 5) Manual deploy (optional)
 
@@ -128,7 +130,8 @@ npm run deploy
 This repo includes `.github/workflows/deploy.yml` that:
 
 1. Runs tests and typecheck on push to `main`.
-2. Deploys with Wrangler only if checks pass.
+2. Initializes any missing Worker runtime secrets.
+3. Deploys with Wrangler only if checks pass.
 
 ## Local Development
 

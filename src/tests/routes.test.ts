@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi, afterEach } from "vitest";
 import worker from "../index.ts";
 import type { Env } from "../config.ts";
 
@@ -23,6 +23,7 @@ const blankUrlEnv: Env = {
   MCP_RESOURCE: "",
   MCP_AUDIENCE: "",
 };
+const testBaseUrl = "https://deployed-example.workers.dev";
 
 async function req(method: string, path: string, body?: BodyInit, headers?: Record<string, string>): Promise<Response> {
   return worker.fetch(
@@ -30,6 +31,10 @@ async function req(method: string, path: string, body?: BodyInit, headers?: Reco
     testEnv
   );
 }
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
 
 describe("Route method checks (405)", () => {
   it("GET / returns 200", async () => {
@@ -61,15 +66,15 @@ describe("Route method checks (405)", () => {
   });
 
   it("derives deployed issuer and resource from request URL when vars are blank", async () => {
-    const request = new Request("https://ntfy-mcp-gateway.xyofn8h7t.workers.dev/.well-known/oauth-authorization-server");
+    const request = new Request(`${testBaseUrl}/.well-known/oauth-authorization-server`);
     const r = await worker.fetch(request, blankUrlEnv);
     expect(r.status).toBe(200);
 
     const json = await r.json() as Record<string, unknown>;
-    expect(json.issuer).toBe("https://ntfy-mcp-gateway.xyofn8h7t.workers.dev");
-    expect(json.authorization_endpoint).toBe("https://ntfy-mcp-gateway.xyofn8h7t.workers.dev/authorize");
-    expect(json.token_endpoint).toBe("https://ntfy-mcp-gateway.xyofn8h7t.workers.dev/token");
-    expect(json.registration_endpoint).toBe("https://ntfy-mcp-gateway.xyofn8h7t.workers.dev/register");
+    expect(json.issuer).toBe(testBaseUrl);
+    expect(json.authorization_endpoint).toBe(`${testBaseUrl}/authorize`);
+    expect(json.token_endpoint).toBe(`${testBaseUrl}/token`);
+    expect(json.registration_endpoint).toBe(`${testBaseUrl}/register`);
   });
 
   it("GET /.well-known/oauth-protected-resource returns 200", async () => {
@@ -121,7 +126,7 @@ describe("Unauthenticated /mcp returns 401", () => {
 
   it("blank vars still advertise deployed protected resource metadata on /mcp", async () => {
     const r = await worker.fetch(
-      new Request("https://ntfy-mcp-gateway.xyofn8h7t.workers.dev/mcp", {
+      new Request(`${testBaseUrl}/mcp`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ jsonrpc: "2.0", method: "tools/list", id: 1 }),
@@ -131,20 +136,42 @@ describe("Unauthenticated /mcp returns 401", () => {
 
     expect(r.status).toBe(401);
     const wwwAuth = r.headers.get("WWW-Authenticate") || "";
-    expect(wwwAuth).toContain('resource_metadata="https://ntfy-mcp-gateway.xyofn8h7t.workers.dev/.well-known/oauth-protected-resource"');
+    expect(wwwAuth).toContain(`resource_metadata="${testBaseUrl}/.well-known/oauth-protected-resource"`);
     expect(wwwAuth).toContain('scope="notify.write"');
   });
 
   it("returns a clear config error instead of advertising an invalid issuer path", async () => {
     const r = await worker.fetch(
-      new Request("https://ntfy-mcp-gateway.xyofn8h7t.workers.dev/.well-known/oauth-authorization-server"),
-      { ...blankUrlEnv, OAUTH_ISSUER: "https://ntfy-mcp-gateway.xyofn8h7t.workers.dev/mcp" }
+      new Request(`${testBaseUrl}/.well-known/oauth-authorization-server`),
+      { ...blankUrlEnv, OAUTH_ISSUER: `${testBaseUrl}/mcp` }
     );
 
     expect(r.status).toBe(500);
     const json = await r.json() as Record<string, unknown>;
     expect(json.error).toBe("invalid_config");
     expect(json.error_description).toBeTypeOf("string");
+  });
+
+  it("logs request context when /register fails because a secret is missing", async () => {
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const r = await worker.fetch(
+      new Request(`${testBaseUrl}/register`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ redirect_uris: ["https://chatgpt.com/aip/callback"] }),
+      }),
+      { ...blankUrlEnv, OAUTH_JWT_SIGNING_KEY_B64: "" }
+    );
+
+    expect(r.status).toBe(500);
+    const json = await r.json() as Record<string, unknown>;
+    expect(json.error).toBe("invalid_config");
+    expect(json.error_description).toBe("OAUTH_JWT_SIGNING_KEY_B64 is required");
+    expect(errorSpy).toHaveBeenCalledWith(
+      "Request failed due to invalid config",
+      expect.stringContaining("\"path\":\"/register\"")
+    );
   });
 
   it("POST /mcp with access_token query param still returns 401", async () => {

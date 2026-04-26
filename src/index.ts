@@ -6,6 +6,15 @@ import { handleAuthorizeGet, handleAuthorizePost } from "./oauth/authorize.ts";
 import { handleToken } from "./oauth/token.ts";
 import { handleMcp } from "./mcp/server.ts";
 
+function requestContext(request: Request): Record<string, string | null> {
+  const url = new URL(request.url);
+  return {
+    method: request.method.toUpperCase(),
+    path: url.pathname,
+    requestId: request.headers.get("cf-ray") ?? request.headers.get("x-request-id"),
+  };
+}
+
 function notFound(): Response {
   return Response.json({ error: "not_found" }, { status: 404 });
 }
@@ -76,12 +85,22 @@ export default {
       return notFound();
     } catch (e) {
       if (e instanceof ConfigError) {
+        console.error("Request failed due to invalid config", JSON.stringify({
+          ...requestContext(request),
+          error: e.message,
+        }));
         return Response.json(
           { error: "invalid_config", error_description: e.message },
           { status: 500 }
         );
       }
-      console.error("Unhandled error:", (e as Error).message);
+      const error = e instanceof Error ? e : new Error(String(e));
+      console.error("Unhandled request error", JSON.stringify({
+        ...requestContext(request),
+        name: error.name,
+        message: error.message,
+        stack: error.stack ?? null,
+      }));
       return Response.json({ error: "internal_server_error" }, { status: 500 });
     }
   },
