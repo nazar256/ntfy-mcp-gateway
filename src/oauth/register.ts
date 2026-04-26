@@ -106,12 +106,14 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function uniqueSorted(values: string[]): string[] {
-  return Array.from(new Set(values)).sort((a, b) => a.localeCompare(b));
+  return Array.from(new Set(values)).sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
 }
 
 function parseScope(scope: string | undefined): string[] {
   if (scope === undefined) return [SUPPORTED_SCOPE];
-  const scopes = scope.trim().split(/\s+/).filter(Boolean);
+  const trimmedScope = scope.trim();
+  if (!trimmedScope) return [];
+  const scopes = trimmedScope.split(/\s+/);
   return scopes.length > 0 ? uniqueSorted(scopes) : [];
 }
 
