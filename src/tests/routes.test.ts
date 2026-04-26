@@ -91,4 +91,9 @@ describe("Unauthenticated /mcp returns 401", () => {
     expect(wwwAuth).toContain("resource_metadata");
     expect(wwwAuth).toContain("notify.write");
   });
+
+  it("POST /mcp with access_token query param still returns 401", async () => {
+    const r = await req("POST", "/mcp?access_token=fake-token", JSON.stringify({ jsonrpc: "2.0", method: "tools/list", id: 1 }), { "Content-Type": "application/json" });
+    expect(r.status).toBe(401);
+  });
 });
