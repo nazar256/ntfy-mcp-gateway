@@ -40,6 +40,23 @@ interface RegistrationMetadata {
   application_type?: string;
 }
 
+class RegisterMetadataError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "RegisterMetadataError";
+  }
+}
+
+class RedirectUriError extends RegisterMetadataError {
+  hostname: string | null;
+
+  constructor(message: string, hostname: string | null) {
+    super(message);
+    this.name = "RedirectUriError";
+    this.hostname = hostname;
+  }
+}
+
 function registerHeaders(extraHeaders?: HeadersInit): Headers {
   const headers = new Headers({
     "Content-Type": "application/json; charset=utf-8",
@@ -102,7 +119,7 @@ function validateScope(scope: string | undefined): string {
   const scopes = parseScope(scope);
   const unsupportedScopes = scopes.filter(candidate => candidate !== SUPPORTED_SCOPE);
   if (unsupportedScopes.length > 0 || scopes.length === 0) {
-    throw new Error("Only scope notify.write is supported");
+    throw new RegisterMetadataError("Only scope notify.write is supported");
   }
   return SUPPORTED_SCOPE;
 }
@@ -111,7 +128,7 @@ function readOptionalString(body: Record<string, unknown>, field: string): strin
   const value = body[field];
   if (value === undefined) return undefined;
   if (typeof value !== "string") {
-    throw new Error(`${field} must be a string`);
+    throw new RegisterMetadataError(`${field} must be a string`);
   }
   return value;
 }
@@ -120,7 +137,7 @@ function readOptionalStringArray(body: Record<string, unknown>, field: string): 
   const value = body[field];
   if (value === undefined) return undefined;
   if (!Array.isArray(value) || value.some((entry) => typeof entry !== "string")) {
-    throw new Error(`${field} must be an array of strings`);
+    throw new RegisterMetadataError(`${field} must be an array of strings`);
   }
   return value;
 }
@@ -131,7 +148,7 @@ function validateGrantTypes(rawGrantTypes: string[] | undefined): string[] {
     grantTypes.length !== SUPPORTED_GRANT_TYPES.length ||
     grantTypes.some((grantType, index) => grantType !== SUPPORTED_GRANT_TYPES[index])
   ) {
-    throw new Error("Only grant_types [authorization_code] are supported");
+    throw new RegisterMetadataError("Only grant_types [authorization_code] are supported");
   }
   return [...SUPPORTED_GRANT_TYPES];
 }
@@ -142,7 +159,7 @@ function validateResponseTypes(rawResponseTypes: string[] | undefined): string[]
     responseTypes.length !== SUPPORTED_RESPONSE_TYPES.length ||
     responseTypes.some((responseType, index) => responseType !== SUPPORTED_RESPONSE_TYPES[index])
   ) {
-    throw new Error("Only response_types [code] are supported");
+    throw new RegisterMetadataError("Only response_types [code] are supported");
   }
   return [...SUPPORTED_RESPONSE_TYPES];
 }
@@ -207,7 +224,7 @@ function normalizeRedirectUris(redirectUris: string[], httpsHosts: string[]): st
   for (const uri of redirectUris) {
     const result = validateRedirectUri(uri, httpsHosts);
     if (!result.ok) {
-      throw new Error(JSON.stringify({ reason: result.reason, hostname: result.hostname }));
+      throw new RedirectUriError(result.reason, result.hostname);
     }
     normalizedUris.push(result.normalizedUri);
   }
@@ -277,13 +294,13 @@ export async function isValidClientIdForRedirectUri(clientId: string, redirectUr
 function parseRegistrationMetadata(body: Record<string, unknown>, config: Config): RegistrationMetadata {
   const rawRedirectUris = body["redirect_uris"];
   if (!Array.isArray(rawRedirectUris) || rawRedirectUris.length === 0 || rawRedirectUris.some((entry) => typeof entry !== "string")) {
-    throw new Error("redirect_uris must be a non-empty array of strings");
+    throw new RegisterMetadataError("redirect_uris must be a non-empty array of strings");
   }
 
   const normalizedRedirectUris = normalizeRedirectUris(rawRedirectUris, config.redirectHttpsHosts);
   const authMethod = readOptionalString(body, "token_endpoint_auth_method") ?? "none";
   if (authMethod !== "none") {
-    throw new Error("Only token_endpoint_auth_method=none is supported");
+    throw new RegisterMetadataError("Only token_endpoint_auth_method=none is supported");
   }
 
   return {
@@ -323,13 +340,13 @@ export async function handleRegister(request: Request, config: Config): Promise<
   try {
     metadata = parseRegistrationMetadata(body, config);
   } catch (error) {
-    const message = (error as Error).message;
-    try {
-      const parsed = JSON.parse(message) as { reason?: string; hostname?: string | null };
-      return invalidRedirectUri(parsed.reason || "Redirect URI not allowed", parsed.hostname);
-    } catch {
-      return invalidClientMetadata(message);
+    if (error instanceof RedirectUriError) {
+      return invalidRedirectUri(error.message, error.hostname);
     }
+    if (error instanceof RegisterMetadataError) {
+      return invalidClientMetadata(error.message);
+    }
+    throw error;
   }
 
   const clientId = await deriveClientId(metadata.redirect_uris, config);

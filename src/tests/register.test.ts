@@ -5,8 +5,8 @@ import { deriveClientId, isAllowedRedirectUri, isValidClientIdForRedirectUri, va
 const HTTPS_HOSTS = ["chatgpt.com", "*.chatgpt.com", "chat.openai.com", "*.chat.openai.com"];
 const config: Config = {
   encKeyB64: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
-  jwtSigningKeyB64: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
-  csrfSigningKeyB64: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+  jwtSigningKeyB64: "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=",
+  csrfSigningKeyB64: "AgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgI=",
   issuer: "https://example.workers.dev",
   mcpResource: "https://example.workers.dev/mcp",
   mcpAudience: "https://example.workers.dev/mcp",
