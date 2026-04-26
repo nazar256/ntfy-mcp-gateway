@@ -148,4 +148,42 @@ describe("ntfy client publishNotification", () => {
     const headers = callArgs[1].headers as Record<string, string>;
     expect(headers["Tags"]).toBe("warning,computer");
   });
+  it("maps optional ntfy headers for publish", async () => {
+    const mockFetch = vi.fn().mockResolvedValue(new Response("", { status: 200 }));
+    await publishNotification(
+      {
+        message: "Header test",
+        title: "Title",
+        tags: ["a", "b"],
+        priority: 5,
+        click: "https://example.com",
+        delay: "10min",
+        markdown: true,
+        attach: "https://example.com/file.png",
+        filename: "file.png",
+      },
+      baseConfig,
+      mockFetch
+    );
+
+    const [, reqInit] = mockFetch.mock.calls[0] as [string, RequestInit];
+    const headers = reqInit.headers as Record<string, string>;
+    expect(headers["Title"]).toBe("Title");
+    expect(headers["Tags"]).toBe("a,b");
+    expect(headers["Priority"]).toBe("5");
+    expect(headers["Click"]).toBe("https://example.com");
+    expect(headers["Delay"]).toBe("10min");
+    expect(headers["Markdown"]).toBe("yes");
+    expect(headers["Attach"]).toBe("https://example.com/file.png");
+    expect(headers["Filename"]).toBe("file.png");
+  });
+
+  it("rejects CR/LF header injection", async () => {
+    const mockFetch = vi.fn();
+    const result = await publishNotification({ message: "Hello", title: "bad\nheader" }, baseConfig, mockFetch);
+    expect(result.success).toBe(false);
+    expect(result.error).toMatch(/CR\/LF/);
+    expect(mockFetch).not.toHaveBeenCalled();
+  });
+
 });
