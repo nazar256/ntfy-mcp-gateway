@@ -28,6 +28,11 @@ describe("OAuth Authorization Server Metadata", () => {
     expect((meta.scopes_supported as string[]).includes("notify.write")).toBe(true);
   });
 
+  it("includes refresh_token grant support", () => {
+    const meta = getAuthServerMetadata(config);
+    expect(meta.grant_types_supported).toEqual(["authorization_code", "refresh_token"]);
+  });
+
   it("includes required endpoints", () => {
     const meta = getAuthServerMetadata(config);
     expect(meta.authorization_endpoint).toBe("https://example.workers.dev/authorize");

@@ -4,14 +4,14 @@ A remote [MCP (Model Context Protocol)](https://modelcontextprotocol.io/) server
 
 ## Features
 
-- **OAuth 2.0 Authorization Code + PKCE** flow (no server-side session storage)
+- **OAuth 2.0 Authorization Code + PKCE + Refresh Token** flow (no server-side session storage)
 - **Stateless design** — ntfy config is AES-GCM encrypted inside the access token
 - **Dynamic Client Registration** (RFC 7591)
 - **MCP Streamable HTTP transport** via `WebStandardStreamableHTTPServerTransport`
 - **`send_notification` MCP tool** with ntfy header support (title, priority, tags, click, delay, markdown, attach)
 - **SSRF protection** — validates ntfy base URL against private/loopback ranges
 - **Input validation** — topic length/charset, message size, header injection prevention
-- **ChatGPT-compatible** — includes OAuth metadata and protected resource discovery
+- **ChatGPT-compatible** — includes OAuth metadata, refresh tokens, and protected resource discovery
 
 ## Architecture
 
@@ -56,6 +56,7 @@ When creating the ChatGPT custom MCP connector, use these exact values:
 - **Resource:** `https://your-worker-domain.workers.dev/mcp`
 
 Do not use the Worker origin alone as the MCP Server URL; it must include `/mcp`.
+Clients only receive refresh tokens if they register `grant_types` including `refresh_token`.
 
 ## MCP Tool
 
