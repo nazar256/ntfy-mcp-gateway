@@ -23,7 +23,7 @@ const blankUrlEnv: Env = {
   MCP_RESOURCE: "",
   MCP_AUDIENCE: "",
 };
-const deployedBaseUrl = "https://ntfy-mcp-gateway.xyofn8h7t.workers.dev";
+const deployedBaseUrl = "https://deployed-example.workers.dev";
 
 async function req(method: string, path: string, body?: BodyInit, headers?: Record<string, string>): Promise<Response> {
   return worker.fetch(
@@ -66,15 +66,15 @@ describe("Route method checks (405)", () => {
   });
 
   it("derives deployed issuer and resource from request URL when vars are blank", async () => {
-    const request = new Request("https://ntfy-mcp-gateway.xyofn8h7t.workers.dev/.well-known/oauth-authorization-server");
+    const request = new Request(`${deployedBaseUrl}/.well-known/oauth-authorization-server`);
     const r = await worker.fetch(request, blankUrlEnv);
     expect(r.status).toBe(200);
 
     const json = await r.json() as Record<string, unknown>;
-    expect(json.issuer).toBe("https://ntfy-mcp-gateway.xyofn8h7t.workers.dev");
-    expect(json.authorization_endpoint).toBe("https://ntfy-mcp-gateway.xyofn8h7t.workers.dev/authorize");
-    expect(json.token_endpoint).toBe("https://ntfy-mcp-gateway.xyofn8h7t.workers.dev/token");
-    expect(json.registration_endpoint).toBe("https://ntfy-mcp-gateway.xyofn8h7t.workers.dev/register");
+    expect(json.issuer).toBe(deployedBaseUrl);
+    expect(json.authorization_endpoint).toBe(`${deployedBaseUrl}/authorize`);
+    expect(json.token_endpoint).toBe(`${deployedBaseUrl}/token`);
+    expect(json.registration_endpoint).toBe(`${deployedBaseUrl}/register`);
   });
 
   it("GET /.well-known/oauth-protected-resource returns 200", async () => {
@@ -126,7 +126,7 @@ describe("Unauthenticated /mcp returns 401", () => {
 
   it("blank vars still advertise deployed protected resource metadata on /mcp", async () => {
     const r = await worker.fetch(
-      new Request("https://ntfy-mcp-gateway.xyofn8h7t.workers.dev/mcp", {
+      new Request(`${deployedBaseUrl}/mcp`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ jsonrpc: "2.0", method: "tools/list", id: 1 }),
@@ -136,7 +136,7 @@ describe("Unauthenticated /mcp returns 401", () => {
 
     expect(r.status).toBe(401);
     const wwwAuth = r.headers.get("WWW-Authenticate") || "";
-    expect(wwwAuth).toContain('resource_metadata="https://ntfy-mcp-gateway.xyofn8h7t.workers.dev/.well-known/oauth-protected-resource"');
+    expect(wwwAuth).toContain(`resource_metadata="${deployedBaseUrl}/.well-known/oauth-protected-resource"`);
     expect(wwwAuth).toContain('scope="notify.write"');
   });
 

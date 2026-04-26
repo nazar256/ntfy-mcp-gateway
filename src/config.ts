@@ -62,12 +62,12 @@ function getTrimmedValue(value: string | undefined): string | undefined {
   return trimmed ? trimmed : undefined;
 }
 
-function getValidatedSecret(name: keyof Env, value: string | undefined): string {
+function getValidatedSecret(name: keyof Env, value: string | undefined, expectedBytes = 32): string {
   const trimmedValue = getTrimmedValue(value);
   if (!trimmedValue) {
     throw new ConfigError(`${name} is required`);
   }
-  validateBase64Secret(name, trimmedValue, 32);
+  validateBase64Secret(name, trimmedValue, expectedBytes);
   return trimmedValue;
 }
 
