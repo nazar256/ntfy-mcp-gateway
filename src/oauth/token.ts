@@ -3,6 +3,7 @@ import { verifyJwt, signJwt, bytesToBase64Url } from "../security/crypto.ts";
 import { clientSupportsGrantType, isValidClientIdForRedirectUri } from "./register.ts";
 
 const REFRESH_TOKEN_TTL_SECONDS = 60 * 60 * 24 * 30;
+const DEFAULT_SCOPE = "notify.write";
 
 async function verifyPkceS256(verifier: string, challenge: string): Promise<boolean> {
   const hash = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(verifier));
@@ -22,7 +23,7 @@ interface TokenState {
 function buildTokenState(payload: Record<string, unknown>, clientId: string, config: Config): TokenState {
   return {
     clientId,
-    scope: typeof payload["scope"] === "string" ? payload["scope"] : "notify.write",
+    scope: typeof payload["scope"] === "string" ? payload["scope"] : DEFAULT_SCOPE,
     resource: config.mcpResource,
     ntfyEnc: payload["ntfy_enc"],
     ntfyIv: payload["ntfy_iv"],
@@ -164,7 +165,7 @@ export async function handleToken(request: Request, config: Config): Promise<Res
       access_token: accessToken,
       token_type: "Bearer",
       expires_in: config.accessTokenTtl,
-      scope: typeof authCodePayload["scope"] === "string" ? authCodePayload["scope"] : "notify.write",
+      scope: typeof authCodePayload["scope"] === "string" ? authCodePayload["scope"] : DEFAULT_SCOPE,
     };
     if (refreshToken) {
       responseBody.refresh_token = refreshToken;
@@ -212,7 +213,7 @@ export async function handleToken(request: Request, config: Config): Promise<Res
       refresh_token: nextRefreshToken,
       token_type: "Bearer",
       expires_in: config.accessTokenTtl,
-      scope: typeof refreshTokenPayload["scope"] === "string" ? refreshTokenPayload["scope"] : "notify.write",
+      scope: typeof refreshTokenPayload["scope"] === "string" ? refreshTokenPayload["scope"] : DEFAULT_SCOPE,
     }, 200);
   }
 

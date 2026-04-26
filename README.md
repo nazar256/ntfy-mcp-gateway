@@ -56,6 +56,7 @@ When creating the ChatGPT custom MCP connector, use these exact values:
 - **Resource:** `https://your-worker-domain.workers.dev/mcp`
 
 Do not use the Worker origin alone as the MCP Server URL; it must include `/mcp`.
+Clients only receive refresh tokens if they register `grant_types` including `refresh_token`.
 
 ## MCP Tool
 
