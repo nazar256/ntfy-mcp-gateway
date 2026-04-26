@@ -85,6 +85,14 @@ describe("Route method checks (405)", () => {
   it("GET /register returns 405", async () => {
     const r = await req("GET", "/register");
     expect(r.status).toBe(405);
+    expect(r.headers.get("Allow")).toBe("POST, OPTIONS");
+  });
+
+  it("OPTIONS /register returns 204 with CORS headers", async () => {
+    const r = await req("OPTIONS", "/register");
+    expect(r.status).toBe(204);
+    expect(r.headers.get("Allow")).toBe("POST, OPTIONS");
+    expect(r.headers.get("Access-Control-Allow-Origin")).toBe("*");
   });
 
   it("DELETE /mcp returns 401 (not 405)", async () => {

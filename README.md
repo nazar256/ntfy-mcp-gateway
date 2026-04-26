@@ -47,6 +47,16 @@ ntfy server (push notifications)
 | `POST /token` | Token exchange |
 | `GET,POST,DELETE /mcp` | MCP Streamable HTTP endpoint |
 
+## ChatGPT Connector Values
+
+When creating the ChatGPT custom MCP connector, use these exact values:
+
+- **MCP Server URL:** `https://<worker-domain>/mcp`
+- **Authorization server base URL:** `https://<worker-domain>`
+- **Resource:** `https://<worker-domain>/mcp`
+
+Do not use the Worker origin alone as the MCP Server URL; it must include `/mcp`.
+
 ## MCP Tool
 
 ### `send_notification`
@@ -167,9 +177,11 @@ curl -d "direct ntfy smoke $(date -Iseconds)" "https://ntfy.sh/$TEST_NTFY_TOPIC"
 2. Deploy Worker with production vars/secrets.
 3. In ChatGPT custom MCP connector UI, use:
 
-   ```text
-   https://<worker-domain>/mcp
-   ```
+    ```text
+    MCP Server URL: https://<worker-domain>/mcp
+    Authorization server base URL: https://<worker-domain>
+    Resource: https://<worker-domain>/mcp
+    ```
 
 4. Complete OAuth form:
 

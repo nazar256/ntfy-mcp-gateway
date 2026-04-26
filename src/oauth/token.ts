@@ -1,5 +1,6 @@
 import type { Config } from "../config.ts";
 import { verifyJwt, signJwt, bytesToBase64Url } from "../security/crypto.ts";
+import { isValidClientIdForRedirectUri } from "./register.ts";
 
 async function verifyPkceS256(verifier: string, challenge: string): Promise<boolean> {
   const hash = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(verifier));
@@ -35,6 +36,11 @@ export async function handleToken(request: Request, config: Config): Promise<Res
 
   const redirectUri = params.get("redirect_uri");
   if (!redirectUri) return tokenError("invalid_request", "redirect_uri required", 400);
+
+  const clientIdValid = await isValidClientIdForRedirectUri(clientId, redirectUri, config);
+  if (!clientIdValid) {
+    return tokenError("invalid_grant", "client_id does not match redirect_uri", 400);
+  }
 
   const codeVerifier = params.get("code_verifier");
   if (!codeVerifier) return tokenError("invalid_request", "code_verifier required", 400);

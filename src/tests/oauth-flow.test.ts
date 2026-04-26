@@ -35,15 +35,35 @@ function extractCsrfToken(html: string): string {
   return match[1];
 }
 
-async function authorizeAndGetCode(options?: { resource?: string; codeChallenge?: string; state?: string }) {
+async function registerClient(body?: Record<string, unknown>) {
+  const response = await worker.fetch(
+    new Request(`${ISSUER}/register`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json; charset=utf-8" },
+      body: JSON.stringify({
+        redirect_uris: ["https://chatgpt.com/aip/callback"],
+        client_name: "ChatGPT",
+        token_endpoint_auth_method: "none",
+        ...body,
+      }),
+    }),
+    testEnv
+  );
+
+  return response;
+}
+
+async function authorizeAndGetCode(options?: { clientId?: string; redirectUri?: string; resource?: string; codeChallenge?: string; state?: string }) {
   const codeVerifier = "verifier-1234567890verifier-1234567890";
   const codeChallenge = options?.codeChallenge ?? await sha256Base64Url(codeVerifier);
   const state = options?.state ?? "state-123";
+  const clientId = options?.clientId ?? "";
+  const redirectUri = options?.redirectUri ?? "https://chatgpt.com/aip/callback";
 
   const authUrl = new URL(`${ISSUER}/authorize`);
   authUrl.searchParams.set("response_type", "code");
-  authUrl.searchParams.set("client_id", "client-1");
-  authUrl.searchParams.set("redirect_uri", "https://chatgpt.com/aip/callback");
+  authUrl.searchParams.set("client_id", clientId);
+  authUrl.searchParams.set("redirect_uri", redirectUri);
   authUrl.searchParams.set("state", state);
   authUrl.searchParams.set("code_challenge", codeChallenge);
   authUrl.searchParams.set("code_challenge_method", "S256");
@@ -62,8 +82,8 @@ async function authorizeAndGetCode(options?: { resource?: string; codeChallenge?
   const form = new URLSearchParams();
   form.set("csrf_token", csrfToken);
   form.set("response_type", "code");
-  form.set("client_id", "client-1");
-  form.set("redirect_uri", "https://chatgpt.com/aip/callback");
+  form.set("client_id", clientId);
+  form.set("redirect_uri", redirectUri);
   form.set("state", state);
   form.set("code_challenge", codeChallenge);
   form.set("code_challenge_method", "S256");
@@ -93,12 +113,12 @@ async function authorizeAndGetCode(options?: { resource?: string; codeChallenge?
   return { getRes, postRes, code, state, codeVerifier };
 }
 
-async function exchangeToken(code: string, codeVerifier: string, resource?: string): Promise<Response> {
+async function exchangeToken(code: string, clientId: string, redirectUri: string, codeVerifier: string, resource?: string): Promise<Response> {
   const params = new URLSearchParams({
     grant_type: "authorization_code",
     code,
-    client_id: "client-1",
-    redirect_uri: "https://chatgpt.com/aip/callback",
+    client_id: clientId,
+    redirect_uri: redirectUri,
     code_verifier: codeVerifier,
   });
   if (resource) {
@@ -116,80 +136,152 @@ async function exchangeToken(code: string, codeVerifier: string, resource?: stri
 }
 
 describe("OAuth compatibility flow", () => {
-  it("DCR accepts ChatGPT redirect and localhost redirect", async () => {
-    const chatgptRes = await worker.fetch(
-      new Request(`${ISSUER}/register`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          redirect_uris: ["https://chatgpt.com/aip/callback"],
-          token_endpoint_auth_method: "none",
-        }),
-      }),
-      testEnv
-    );
+  it("DCR accepts a ChatGPT-style payload and returns RFC 7591 fields", async () => {
+    const chatgptRes = await registerClient({
+      redirect_uris: [
+        "https://chatgpt.com/aip/callback",
+        "https://chat.openai.com/aip/callback",
+      ],
+      client_uri: "https://chatgpt.com",
+      logo_uri: "https://chatgpt.com/logo.png",
+      contacts: ["security@openai.com"],
+      tos_uri: "https://chatgpt.com/tos",
+      policy_uri: "https://chatgpt.com/privacy",
+      scope: "notify.write",
+      grant_types: ["authorization_code"],
+      response_types: ["code"],
+      application_type: "web",
+      ignored_by_server: true,
+    });
     expect(chatgptRes.status).toBe(201);
+    expect(chatgptRes.headers.get("Content-Type")).toContain("application/json");
+    expect(chatgptRes.headers.get("Cache-Control")).toBe("no-store");
+    expect(chatgptRes.headers.get("Access-Control-Allow-Origin")).toBe("*");
 
-    const localRes = await worker.fetch(
-      new Request(`${ISSUER}/register`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ redirect_uris: ["http://localhost:3333/callback"] }),
-      }),
-      testEnv
-    );
+    const json = await chatgptRes.json() as Record<string, unknown>;
+    expect(json.client_id).toBeTypeOf("string");
+    expect(json.client_id_issued_at).toBeTypeOf("number");
+    expect(json.redirect_uris).toEqual([
+      "https://chat.openai.com/aip/callback",
+      "https://chatgpt.com/aip/callback",
+    ]);
+    expect(json.token_endpoint_auth_method).toBe("none");
+    expect(json.grant_types).toEqual(["authorization_code"]);
+    expect(json.response_types).toEqual(["code"]);
+    expect(json.scope).toBe("notify.write");
+    expect(json.client_name).toBe("ChatGPT");
+
+    const localRes = await registerClient({ redirect_uris: ["http://localhost:3333/callback"] });
     expect(localRes.status).toBe(201);
   });
 
   it("DCR rejects unsafe redirect", async () => {
-    const res = await worker.fetch(
-      new Request(`${ISSUER}/register`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ redirect_uris: ["https://evil.example/callback"] }),
-      }),
-      testEnv
-    );
+    const res = await registerClient({ redirect_uris: ["https://evil.example/callback"] });
 
     expect(res.status).toBe(400);
     const json = await res.json() as { error: string };
     expect(json.error).toBe("invalid_redirect_uri");
   });
 
+  it("DCR rejects unsupported client metadata", async () => {
+    const res = await registerClient({
+      token_endpoint_auth_method: "client_secret_post",
+      scope: "notify.write notify.read",
+    });
+
+    expect(res.status).toBe(400);
+    const json = await res.json() as { error: string; error_description: string };
+    expect(json.error).toBe("invalid_client_metadata");
+    expect(json.error_description).toContain("token_endpoint_auth_method");
+  });
+
+  it("DCR rejects non-JSON content types", async () => {
+    const res = await worker.fetch(
+      new Request(`${ISSUER}/register`, {
+        method: "POST",
+        headers: { "Content-Type": "text/plain" },
+        body: JSON.stringify({ redirect_uris: ["https://chatgpt.com/aip/callback"] }),
+      }),
+      testEnv
+    );
+
+    expect(res.status).toBe(400);
+    const json = await res.json() as { error: string };
+    expect(json.error).toBe("invalid_client_metadata");
+  });
+
   it("authorize rejects wrong resource", async () => {
-    const { getRes } = await authorizeAndGetCode({ resource: "https://example.workers.dev/not-mcp" });
+    const registration = await registerClient();
+    const { client_id } = await registration.json() as { client_id: string };
+    const { getRes } = await authorizeAndGetCode({
+      clientId: client_id,
+      redirectUri: "https://chatgpt.com/aip/callback",
+      resource: "https://example.workers.dev/not-mcp",
+    });
     expect(getRes.status).toBe(400);
     const json = await getRes.json() as { error: string };
     expect(json.error).toBe("invalid_target");
   });
 
   it("token exchange rejects wrong resource", async () => {
-    const auth = await authorizeAndGetCode({ resource: MCP_RESOURCE });
+    const registration = await registerClient();
+    const { client_id } = await registration.json() as { client_id: string };
+    const auth = await authorizeAndGetCode({
+      clientId: client_id,
+      redirectUri: "https://chatgpt.com/aip/callback",
+      resource: MCP_RESOURCE,
+    });
     expect(auth.code).toBeTruthy();
 
-    const tokenRes = await exchangeToken(auth.code!, auth.codeVerifier, "https://example.workers.dev/wrong");
+    const tokenRes = await exchangeToken(auth.code!, client_id, "https://chatgpt.com/aip/callback", auth.codeVerifier, "https://example.workers.dev/wrong");
     expect(tokenRes.status).toBe(400);
     const json = await tokenRes.json() as { error: string };
     expect(json.error).toBe("invalid_target");
   });
 
   it("token exchange rejects PKCE mismatch", async () => {
-    const auth = await authorizeAndGetCode({ resource: MCP_RESOURCE });
+    const registration = await registerClient();
+    const { client_id } = await registration.json() as { client_id: string };
+    const auth = await authorizeAndGetCode({
+      clientId: client_id,
+      redirectUri: "https://chatgpt.com/aip/callback",
+      resource: MCP_RESOURCE,
+    });
     expect(auth.code).toBeTruthy();
 
-    const tokenRes = await exchangeToken(auth.code!, "definitely-the-wrong-verifier", MCP_RESOURCE);
+    const tokenRes = await exchangeToken(auth.code!, client_id, "https://chatgpt.com/aip/callback", "definitely-the-wrong-verifier", MCP_RESOURCE);
     expect(tokenRes.status).toBe(400);
     const json = await tokenRes.json() as { error: string };
     expect(json.error).toBe("invalid_grant");
   });
 
   it("token response includes no-store headers", async () => {
-    const auth = await authorizeAndGetCode({ resource: MCP_RESOURCE });
+    const registration = await registerClient();
+    const { client_id } = await registration.json() as { client_id: string };
+    const auth = await authorizeAndGetCode({
+      clientId: client_id,
+      redirectUri: "https://chatgpt.com/aip/callback",
+      resource: MCP_RESOURCE,
+    });
     expect(auth.code).toBeTruthy();
 
-    const tokenRes = await exchangeToken(auth.code!, auth.codeVerifier, MCP_RESOURCE);
+    const tokenRes = await exchangeToken(auth.code!, client_id, "https://chatgpt.com/aip/callback", auth.codeVerifier, MCP_RESOURCE);
     expect(tokenRes.status).toBe(200);
     expect(tokenRes.headers.get("Cache-Control")).toBe("no-store");
     expect(tokenRes.headers.get("Pragma")).toBe("no-cache");
+  });
+
+  it("authorize rejects a client_id that does not match redirect_uri", async () => {
+    const registration = await registerClient({ redirect_uris: ["https://chatgpt.com/aip/callback"] });
+    const { client_id } = await registration.json() as { client_id: string };
+    const { getRes } = await authorizeAndGetCode({
+      clientId: client_id,
+      redirectUri: "https://chat.openai.com/aip/callback",
+      resource: MCP_RESOURCE,
+    });
+
+    expect(getRes.status).toBe(400);
+    const json = await getRes.json() as { error: string };
+    expect(json.error).toBe("invalid_request");
   });
 });

@@ -1,7 +1,7 @@
 import type { Env } from "./config.ts";
 import { ConfigError, loadConfig } from "./config.ts";
 import { getAuthServerMetadata, getProtectedResourceMetadata } from "./oauth/metadata.ts";
-import { handleRegister } from "./oauth/register.ts";
+import { handleRegister, registerPreflightResponse } from "./oauth/register.ts";
 import { handleAuthorizeGet, handleAuthorizePost } from "./oauth/authorize.ts";
 import { handleToken } from "./oauth/token.ts";
 import { handleMcp } from "./mcp/server.ts";
@@ -50,7 +50,8 @@ export default {
       }
 
       if (path === "/register") {
-        if (method !== "POST") return methodNotAllowed("POST");
+        if (method === "OPTIONS") return registerPreflightResponse();
+        if (method !== "POST") return methodNotAllowed("POST, OPTIONS");
         return handleRegister(request, config);
       }
 
