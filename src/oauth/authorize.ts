@@ -2,6 +2,7 @@ import type { Config } from "../config.ts";
 import { signJwt, signCsrf, verifyCsrf, encryptPayload } from "../security/crypto.ts";
 import { validateNtfyConfig } from "../security/validators.ts";
 import type { NtfyConfig } from "../security/validators.ts";
+import { isValidClientIdForRedirectUri, validateRedirectUri } from "./register.ts";
 
 interface AuthorizeParams {
   response_type: string;
@@ -14,7 +15,18 @@ interface AuthorizeParams {
   resource?: string;
 }
 
-function validateAuthorizeParams(params: URLSearchParams, config: Config): AuthorizeParams | Response {
+function normalizeRequestedScope(scope: string | null): string | Response {
+  if (!scope) return "notify.write";
+
+  const scopes = scope.split(/\s+/).filter(Boolean);
+  if (scopes.length === 0 || scopes.some((candidate) => candidate !== "notify.write")) {
+    return Response.json({ error: "invalid_scope", error_description: "Only scope notify.write is supported" }, { status: 400 });
+  }
+
+  return "notify.write";
+}
+
+async function validateAuthorizeParams(params: URLSearchParams, config: Config): Promise<AuthorizeParams | Response> {
   const responseType = params.get("response_type");
   if (responseType !== "code") {
     return Response.json({ error: "unsupported_response_type" }, { status: 400 });
@@ -26,6 +38,10 @@ function validateAuthorizeParams(params: URLSearchParams, config: Config): Autho
   const redirectUri = params.get("redirect_uri");
   if (!redirectUri) {
     return Response.json({ error: "invalid_request", error_description: "redirect_uri required" }, { status: 400 });
+  }
+  const redirectValidation = validateRedirectUri(redirectUri, config.redirectHttpsHosts);
+  if (!redirectValidation.ok) {
+    return Response.json({ error: "invalid_request", error_description: redirectValidation.reason }, { status: 400 });
   }
   const state = params.get("state");
   if (!state) {
@@ -39,9 +55,13 @@ function validateAuthorizeParams(params: URLSearchParams, config: Config): Autho
   if (codeChallengeMethod !== "S256") {
     return Response.json({ error: "invalid_request", error_description: "Only S256 code_challenge_method supported" }, { status: 400 });
   }
-  const scope = params.get("scope");
-  if (scope && !scope.split(" ").includes("notify.write")) {
-    return Response.json({ error: "invalid_scope", error_description: "Unsupported scope" }, { status: 400 });
+  const clientIdValid = await isValidClientIdForRedirectUri(clientId, redirectValidation.normalizedUri, config);
+  if (!clientIdValid) {
+    return Response.json({ error: "invalid_request", error_description: "client_id does not match redirect_uri" }, { status: 400 });
+  }
+  const normalizedScope = normalizeRequestedScope(params.get("scope"));
+  if (normalizedScope instanceof Response) {
+    return normalizedScope;
   }
   const resource = params.get("resource");
   if (resource && resource !== config.mcpResource) {
@@ -50,11 +70,11 @@ function validateAuthorizeParams(params: URLSearchParams, config: Config): Autho
   return {
     response_type: responseType,
     client_id: clientId,
-    redirect_uri: redirectUri,
+    redirect_uri: redirectValidation.normalizedUri,
     state,
     code_challenge: codeChallenge,
     code_challenge_method: codeChallengeMethod,
-    scope: scope ?? undefined,
+    scope: normalizedScope,
     resource: resource ?? undefined,
   };
 }
@@ -125,7 +145,7 @@ ${error ? `<div class="error">${escapeHtml(error)}</div>` : ""}
 export async function handleAuthorizeGet(request: Request, config: Config): Promise<Response> {
   const url = new URL(request.url);
   const params = url.searchParams;
-  const result = validateAuthorizeParams(params, config);
+  const result = await validateAuthorizeParams(params, config);
   if (result instanceof Response) return result;
 
   const csrfToken = await signCsrf(result.state, config.csrfSigningKeyB64);
@@ -147,7 +167,7 @@ export async function handleAuthorizePost(request: Request, config: Config): Pro
     params.set(k, String(v));
   }
 
-  const result = validateAuthorizeParams(params, config);
+  const result = await validateAuthorizeParams(params, config);
   if (result instanceof Response) return result;
 
   const csrfToken = params.get("csrf_token") || "";
