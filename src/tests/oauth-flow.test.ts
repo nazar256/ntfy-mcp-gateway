@@ -53,12 +53,12 @@ async function registerClient(body?: Record<string, unknown>) {
   return response;
 }
 
-async function authorizeAndGetCode(options?: { clientId?: string; redirectUri?: string; resource?: string; codeChallenge?: string; state?: string }) {
+async function authorizeAndGetCode(options: { clientId: string; redirectUri?: string; resource?: string; codeChallenge?: string; state?: string }) {
   const codeVerifier = "verifier-1234567890verifier-1234567890";
-  const codeChallenge = options?.codeChallenge ?? await sha256Base64Url(codeVerifier);
-  const state = options?.state ?? "state-123";
-  const clientId = options?.clientId ?? "";
-  const redirectUri = options?.redirectUri ?? "https://chatgpt.com/aip/callback";
+  const codeChallenge = options.codeChallenge ?? await sha256Base64Url(codeVerifier);
+  const state = options.state ?? "state-123";
+  const clientId = options.clientId;
+  const redirectUri = options.redirectUri ?? "https://chatgpt.com/aip/callback";
 
   const authUrl = new URL(`${ISSUER}/authorize`);
   authUrl.searchParams.set("response_type", "code");
@@ -68,7 +68,7 @@ async function authorizeAndGetCode(options?: { clientId?: string; redirectUri?: 
   authUrl.searchParams.set("code_challenge", codeChallenge);
   authUrl.searchParams.set("code_challenge_method", "S256");
   authUrl.searchParams.set("scope", "notify.write");
-  if (options?.resource !== undefined) {
+  if (options.resource !== undefined) {
     authUrl.searchParams.set("resource", options.resource);
   }
 
@@ -87,7 +87,7 @@ async function authorizeAndGetCode(options?: { clientId?: string; redirectUri?: 
   form.set("state", state);
   form.set("code_challenge", codeChallenge);
   form.set("code_challenge_method", "S256");
-  if (options?.resource !== undefined) {
+  if (options.resource !== undefined) {
     form.set("resource", options.resource);
   }
   form.set("ntfy_base_url", "https://ntfy.sh");
