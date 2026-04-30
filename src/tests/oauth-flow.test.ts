@@ -269,6 +269,27 @@ describe("OAuth compatibility flow", () => {
     expect(tokenRes.status).toBe(200);
     expect(tokenRes.headers.get("Cache-Control")).toBe("no-store");
     expect(tokenRes.headers.get("Pragma")).toBe("no-cache");
+    expect(tokenRes.headers.get("Access-Control-Allow-Origin")).toBe("*");
+  });
+
+  it("token endpoint supports browser preflight for ChatGPT code exchange", async () => {
+    const preflightRes = await worker.fetch(
+      new Request(`${ISSUER}/token`, {
+        method: "OPTIONS",
+        headers: {
+          Origin: "https://chatgpt.com",
+          "Access-Control-Request-Method": "POST",
+          "Access-Control-Request-Headers": "content-type",
+        },
+      }),
+      testEnv
+    );
+
+    expect(preflightRes.status).toBe(204);
+    expect(preflightRes.headers.get("Allow")).toBe("POST, OPTIONS");
+    expect(preflightRes.headers.get("Access-Control-Allow-Origin")).toBe("*");
+    expect(preflightRes.headers.get("Access-Control-Allow-Methods")).toContain("POST");
+    expect(preflightRes.headers.get("Access-Control-Allow-Headers")).toContain("Content-Type");
   });
 
   it("token exchange issues and accepts refresh tokens", async () => {

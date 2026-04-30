@@ -3,7 +3,7 @@ import { ConfigError, loadConfig } from "./config.ts";
 import { getAuthServerMetadata, getProtectedResourceMetadata } from "./oauth/metadata.ts";
 import { handleRegister, registerPreflightResponse } from "./oauth/register.ts";
 import { handleAuthorizeGet, handleAuthorizePost } from "./oauth/authorize.ts";
-import { handleToken } from "./oauth/token.ts";
+import { handleToken, tokenPreflightResponse } from "./oauth/token.ts";
 import { handleMcp } from "./mcp/server.ts";
 
 function requestContext(request: Request): Record<string, string | null> {
@@ -71,7 +71,8 @@ export default {
       }
 
       if (path === "/token") {
-        if (method !== "POST") return methodNotAllowed("POST");
+        if (method === "OPTIONS") return tokenPreflightResponse();
+        if (method !== "POST") return methodNotAllowed("POST, OPTIONS");
         return handleToken(request, config);
       }
 

@@ -100,6 +100,12 @@ describe("Route method checks (405)", () => {
     expect(r.headers.get("Access-Control-Allow-Origin")).toBe("*");
   });
 
+  it("GET /token returns 405 with OPTIONS allowed", async () => {
+    const r = await req("GET", "/token");
+    expect(r.status).toBe(405);
+    expect(r.headers.get("Allow")).toBe("POST, OPTIONS");
+  });
+
   it("DELETE /mcp returns 401 (not 405)", async () => {
     const r = await req("DELETE", "/mcp");
     expect(r.status).toBe(401);
