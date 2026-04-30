@@ -56,7 +56,54 @@ async function mcpRequest(token: string, body: Record<string, unknown>, method =
   );
 }
 
+async function mcpGetRequest(token?: string, query?: string): Promise<Response> {
+  const url = new URL(`${ISSUER}/mcp`);
+  if (query) {
+    url.search = query;
+  }
+
+  const headers: Record<string, string> = {
+    "Accept": "text/event-stream",
+  };
+
+  if (token) {
+    headers["Authorization"] = `Bearer ${token}`;
+  }
+
+  return worker.fetch(
+    new Request(url.toString(), {
+      method: "GET",
+      headers,
+    }),
+    testEnv
+  );
+}
+
 describe("MCP endpoint with valid token", () => {
+  it("GET /mcp with bearer token returns an event stream", async () => {
+    const token = await makeAccessToken({
+      ntfyBaseUrl: "https://ntfy.sh",
+      defaultTopic: "test-topic-abc123",
+      allowTopicOverride: false,
+    });
+
+    const response = await mcpGetRequest(token);
+    expect(response.status).toBe(200);
+    expect(response.headers.get("Content-Type")).toContain("text/event-stream");
+  });
+
+  it("GET /mcp with access_token query fallback returns an event stream", async () => {
+    const token = await makeAccessToken({
+      ntfyBaseUrl: "https://ntfy.sh",
+      defaultTopic: "test-topic-abc123",
+      allowTopicOverride: false,
+    });
+
+    const response = await mcpGetRequest(undefined, `access_token=${encodeURIComponent(token)}`);
+    expect(response.status).toBe(200);
+    expect(response.headers.get("Content-Type")).toContain("text/event-stream");
+  });
+
   it("initialize, tools/list and tools/call work", async () => {
     const token = await makeAccessToken({
       ntfyBaseUrl: "https://ntfy.sh",

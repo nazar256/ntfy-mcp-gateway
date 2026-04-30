@@ -7,10 +7,20 @@ import { validateNtfyConfig } from "../security/validators.ts";
 import type { NtfyConfig } from "../security/validators.ts";
 import { publishNotification } from "../ntfy/client.ts";
 
-async function extractBearerToken(request: Request): Promise<string | null> {
+function extractBearerToken(request: Request): string | null {
   const auth = request.headers.get("Authorization");
-  if (!auth || !auth.startsWith("Bearer ")) return null;
-  return auth.slice(7);
+  if (auth?.startsWith("Bearer ")) {
+    const bearerToken = auth.slice(7).trim();
+    if (bearerToken) return bearerToken;
+  }
+
+  const url = new URL(request.url);
+  if (request.method.toUpperCase() !== "GET" || url.pathname !== "/mcp") {
+    return null;
+  }
+
+  const queryToken = url.searchParams.get("access_token")?.trim();
+  return queryToken || null;
 }
 
 function unauthorizedResponse(issuer: string, error = "invalid_token"): Response {
@@ -27,7 +37,7 @@ function unauthorizedResponse(issuer: string, error = "invalid_token"): Response
 }
 
 export async function handleMcp(request: Request, config: Config): Promise<Response> {
-  const token = await extractBearerToken(request);
+  const token = extractBearerToken(request);
   if (!token) {
     return unauthorizedResponse(config.issuer);
   }
