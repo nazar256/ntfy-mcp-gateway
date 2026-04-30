@@ -149,6 +149,21 @@ npm test
 npm run typecheck
 ```
 
+## CLI OAuth Smoke
+
+The deployed worker has been verified with these CLI clients:
+
+```bash
+npm run smoke:metadata
+npm run smoke:oauth
+```
+
+Notes:
+
+- Latest `@mcpjam/cli` exposes `--print-url` but not `--debug-out`.
+- For interactive browser approval, `--step-timeout 120000` is useful to avoid client-side timeout while completing the consent form.
+- `mcp-remote-client` also works with `npx -y -p mcp-remote@latest mcp-remote-client https://ntfy-mcp-gateway.xyofn8h7t.workers.dev/mcp --transport http-only --debug`.
+
 ## Manual Smoke Tests
 
 ### Local metadata/auth smoke

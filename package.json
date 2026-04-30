@@ -7,7 +7,9 @@
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
     "test": "vitest run",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "smoke:metadata": "curl -i https://ntfy-mcp-gateway.xyofn8h7t.workers.dev/.well-known/oauth-authorization-server && curl -i https://ntfy-mcp-gateway.xyofn8h7t.workers.dev/.well-known/oauth-protected-resource && curl -i https://ntfy-mcp-gateway.xyofn8h7t.workers.dev/.well-known/oauth-protected-resource/mcp && curl -i https://ntfy-mcp-gateway.xyofn8h7t.workers.dev/mcp",
+    "smoke:oauth": "npx -y @mcpjam/cli@latest oauth conformance --url https://ntfy-mcp-gateway.xyofn8h7t.workers.dev/mcp --protocol-version 2025-11-25 --registration dcr --auth-mode interactive --scopes notify.write --verify-tools --print-url --step-timeout 120000"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.10.2",
