@@ -4,6 +4,12 @@ import { clientSupportsGrantType, isValidClientIdForRedirectUri } from "./regist
 
 const REFRESH_TOKEN_TTL_SECONDS = 60 * 60 * 24 * 30;
 const DEFAULT_SCOPE = "notify.write";
+const TOKEN_CORS_HEADERS = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type, Authorization",
+  "Access-Control-Max-Age": "600",
+};
 
 async function verifyPkceS256(verifier: string, challenge: string): Promise<boolean> {
   const hash = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(verifier));
@@ -81,7 +87,18 @@ function tokenJson(body: Record<string, unknown>, status: number): Response {
       "Content-Type": "application/json",
       "Cache-Control": "no-store",
       "Pragma": "no-cache",
+      ...TOKEN_CORS_HEADERS,
     },
+  });
+}
+
+export function tokenPreflightResponse(): Response {
+  return new Response(null, {
+    status: 204,
+    headers: new Headers({
+      Allow: "POST, OPTIONS",
+      ...TOKEN_CORS_HEADERS,
+    }),
   });
 }
 
