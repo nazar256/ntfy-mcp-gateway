@@ -118,6 +118,11 @@ describe("Route method checks (405)", () => {
 });
 
 describe("Unauthenticated /mcp returns 401", () => {
+  it("GET /mcp without token returns 401", async () => {
+    const r = await req("GET", "/mcp", undefined, { "Accept": "text/event-stream" });
+    expect(r.status).toBe(401);
+  });
+
   it("POST /mcp without token returns 401", async () => {
     const r = await req("POST", "/mcp", JSON.stringify({ jsonrpc: "2.0", method: "tools/list", id: 1 }), { "Content-Type": "application/json" });
     expect(r.status).toBe(401);
@@ -182,6 +187,11 @@ describe("Unauthenticated /mcp returns 401", () => {
 
   it("POST /mcp with access_token query param still returns 401", async () => {
     const r = await req("POST", "/mcp?access_token=fake-token", JSON.stringify({ jsonrpc: "2.0", method: "tools/list", id: 1 }), { "Content-Type": "application/json" });
+    expect(r.status).toBe(401);
+  });
+
+  it("GET /mcp with invalid access_token query param returns 401", async () => {
+    const r = await req("GET", "/mcp?access_token=fake-token", undefined, { "Accept": "text/event-stream" });
     expect(r.status).toBe(401);
   });
 });
